@@ -1,0 +1,10 @@
+pandas
+psycopg2
+re
+sys
+sqlite3
+tqdm
+numpy
+scikit-learn
+groq
+sqlalchemy
