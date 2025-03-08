@@ -2,10 +2,34 @@ import os
 import json
 import pandas as pd
 import argparse
+import time
+import concurrent.futures
+from tqdm import tqdm
 from database import test_connection
 from groq_client import GroqClient
 from nl_to_sql import NLtoSQLConverter
 from sql_corrector import SQLCorrector
+
+# Simple cache implementation
+class QueryCache:
+    def __init__(self):
+        self.nl_to_sql_cache = {}
+        self.sql_correction_cache = {}
+    
+    def get_nl_to_sql(self, nl_query):
+        return self.nl_to_sql_cache.get(nl_query)
+    
+    def set_nl_to_sql(self, nl_query, result):
+        self.nl_to_sql_cache[nl_query] = result
+    
+    def get_sql_correction(self, incorrect_sql):
+        return self.sql_correction_cache.get(incorrect_sql)
+    
+    def set_sql_correction(self, incorrect_sql, result):
+        self.sql_correction_cache[incorrect_sql] = result
+
+# Global cache instance
+cache = QueryCache()
 
 def load_json_data(file_path):
     """Load JSON data from a file"""
@@ -25,8 +49,42 @@ def save_results_to_csv(results, output_file):
     except Exception as e:
         print(f"Error saving results to {output_file}: {e}")
 
-def process_nl_to_sql_task(data_file, output_file, execute=False):
-    """Process the NL to SQL task"""
+def process_nl_query(args):
+    """Process a single natural language query"""
+    converter, nl_query, execute = args
+    
+    # Check cache
+    cached_result = cache.get_nl_to_sql(nl_query)
+    if cached_result:
+        return cached_result
+    
+    # Process the query
+    result = converter.nl_to_sql(nl_query, execute)
+    
+    # Cache the result
+    cache.set_nl_to_sql(nl_query, result)
+    
+    return result
+
+def process_incorrect_sql(args):
+    """Process a single incorrect SQL query"""
+    corrector, incorrect_sql, execute = args
+    
+    # Check cache
+    cached_result = cache.get_sql_correction(incorrect_sql)
+    if cached_result:
+        return cached_result
+    
+    # Process the query
+    result = corrector.correct_sql(incorrect_sql, execute)
+    
+    # Cache the result
+    cache.set_sql_correction(incorrect_sql, result)
+    
+    return result
+
+def process_nl_to_sql_task(data_file, output_file, execute=False, max_workers=4, batch_size=10):
+    """Process the NL to SQL task with parallel execution"""
     print(f"Processing NL to SQL task using {data_file}")
     
     # Load data
@@ -38,14 +96,41 @@ def process_nl_to_sql_task(data_file, output_file, execute=False):
     # Initialize converter
     converter = NLtoSQLConverter()
     
-    # Process data
-    results = converter.process_nl_to_sql_dataset(data, execute)
+    # Process data in parallel with progress bar
+    all_results = []
     
-    # Save results
-    save_results_to_csv(results, output_file)
+    # Process in batches to avoid overwhelming the API
+    for i in range(0, len(data), batch_size):
+        batch = data[i:i+batch_size]
+        
+        # Prepare arguments for parallel processing
+        task_args = [(converter, item.get("nl_query", ""), execute) for item in batch]
+        
+        # Process batch in parallel
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {executor.submit(process_nl_query, args): args for args in task_args}
+            
+            for future in tqdm(concurrent.futures.as_completed(futures), 
+                              total=len(futures),
+                              desc=f"Batch {i//batch_size + 1}/{(len(data)-1)//batch_size + 1}"):
+                try:
+                    result = future.result()
+                    all_results.append(result)
+                except Exception as exc:
+                    print(f"Query processing generated an exception: {exc}")
+        
+        # Intermediate save
+        if i % (batch_size * 5) == 0 and i > 0:
+            save_results_to_csv(all_results, output_file)
+        
+        # Rate limiting pause between batches
+        time.sleep(2)
+    
+    # Save final results
+    save_results_to_csv(all_results, output_file)
 
-def process_sql_correction_task(data_file, output_file, execute=False):
-    """Process the SQL correction task"""
+def process_sql_correction_task(data_file, output_file, execute=False, max_workers=4, batch_size=10):
+    """Process the SQL correction task with parallel execution"""
     print(f"Processing SQL correction task using {data_file}")
     
     # Load data
@@ -57,11 +142,38 @@ def process_sql_correction_task(data_file, output_file, execute=False):
     # Initialize corrector
     corrector = SQLCorrector()
     
-    # Process data
-    results = corrector.process_sql_correction_dataset(data, execute)
+    # Process data in parallel with progress bar
+    all_results = []
     
-    # Save results
-    save_results_to_csv(results, output_file)
+    # Process in batches to avoid overwhelming the API
+    for i in range(0, len(data), batch_size):
+        batch = data[i:i+batch_size]
+        
+        # Prepare arguments for parallel processing
+        task_args = [(corrector, item.get("incorrect_sql", ""), execute) for item in batch]
+        
+        # Process batch in parallel
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {executor.submit(process_incorrect_sql, args): args for args in task_args}
+            
+            for future in tqdm(concurrent.futures.as_completed(futures), 
+                              total=len(futures),
+                              desc=f"Batch {i//batch_size + 1}/{(len(data)-1)//batch_size + 1}"):
+                try:
+                    result = future.result()
+                    all_results.append(result)
+                except Exception as exc:
+                    print(f"Query correction generated an exception: {exc}")
+        
+        # Intermediate save
+        if i % (batch_size * 5) == 0 and i > 0:
+            save_results_to_csv(all_results, output_file)
+        
+        # Rate limiting pause between batches
+        time.sleep(2)
+    
+    # Save final results
+    save_results_to_csv(all_results, output_file)
 
 def main():
     parser = argparse.ArgumentParser(description='AI-Powered SQL Query Generator and Error Corrector')
@@ -77,8 +189,14 @@ def main():
                       help='Path to output file for NL to SQL results')
     parser.add_argument('--sql-output', type=str, default='sql_correction_results.csv',
                       help='Path to output file for SQL correction results')
+    parser.add_argument('--max-workers', type=int, default=4,
+                      help='Maximum number of worker threads for parallel processing')
+    parser.add_argument('--batch-size', type=int, default=10,
+                      help='Number of queries to process in each batch')
     
     args = parser.parse_args()
+    
+    start_time = time.time()
     
     # Test database connection
     if not test_connection():
@@ -87,7 +205,7 @@ def main():
     
     # Test Groq API key
     try:
-        client = GroqClient(api_key="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")
+        client = GroqClient()
         _ = client.get_completion("test", max_tokens=10)
     except Exception as e:
         print(f"Groq API connection failed: {e}")
@@ -96,10 +214,15 @@ def main():
     
     # Process tasks
     if args.task in ['generate', 'both']:
-        process_nl_to_sql_task(args.nl_data, args.nl_output, args.execute)
+        process_nl_to_sql_task(args.nl_data, args.nl_output, args.execute, 
+                              args.max_workers, args.batch_size)
     
     if args.task in ['correct', 'both']:
-        process_sql_correction_task(args.sql_data, args.sql_output, args.execute)
+        process_sql_correction_task(args.sql_data, args.sql_output, args.execute,
+                                   args.max_workers, args.batch_size)
+    
+    elapsed_time = time.time() - start_time
+    print(f"Total execution time: {elapsed_time:.2f} seconds")
 
 if __name__ == "__main__":
     main()

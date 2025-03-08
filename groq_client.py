@@ -4,7 +4,7 @@ from groq import Groq
 class GroqClient:
     def __init__(self, api_key=None):
         """Initialize the Groq API client with the provided API key or from environment variable"""
-        self.api_key = "?"
+        self.api_key = api_key or os.environ.get("GROQ_API_KEY")
         if not self.api_key:
             raise ValueError("GROQ_API_KEY must be provided or set as an environment variable")
         
