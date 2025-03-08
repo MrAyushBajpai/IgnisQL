@@ -1,0 +1,326 @@
+[
+  {
+    "NL": "Find the products in the cart that have a promotional discounted price less than $50, along with the customer's loyalty program tier level and the customer's accumulated loyalty points balance.",
+    "Query": "SELECT \n  c.fk_product_id, \n  p.product_display_name, \n  p.promotional_discounted_price, \n  cl.loyalty_program_tier_level, \n  cl.accumulated_loyalty_points_balance\nFROM \n  cart c\n  JOIN products p ON c.fk_product_id = p.unique_product_identifier\n  JOIN customers_loyalty_program cl ON c.fk_user_id = cl.associated_customer_reference_id\nWHERE \n  p.promotional_discounted_price < 50;"
+  },
+  {
+    "NL": "What is the total discount amount redeemed by customers who have participated in exclusive beta testing and have a loyalty membership unique identifier greater than 1000?",
+    "Query": "SELECT \n  SUM(discount_amount) AS total_discount_amount\nFROM \n  transactions_and_payments\nWHERE \n  customer_feedback_engagement_score = 'exclusive_beta_testing'\n  AND customers_loyalty_program.loyalty_membership_unique_identifier > 1000;"
+  },
+  {
+    "NL": "Retrieve the total amount of all orders that contain products from the cart of user with ID 123 and have a shipping date after January 1, 2023.",
+    "Query": "SELECT SUM(o.total_amount) \nFROM orders o \nJOIN order_items oi ON o.order_id = oi.order_id \nJOIN cart c ON oi.product_id = c.fk_product_id \nWHERE c.fk_user_id = 123 \nAND o.shipping_date > '2023-01-01' \nAND oi.product_id IN (SELECT fk_product_id FROM cart WHERE fk_user_id = 123);"
+  },
+  {
+    "NL": "What are the campaign names of the campaigns that have generated more than $1000 in revenue and have a cost per acquisition of less than $10?",
+    "Query": "SELECT c.campaign_name\nFROM campaigns c\nWHERE c.revenue_generated > 1000\nAND c.cost_per_acquisition < 10;"
+  },
+  {
+    "NL": "Show the average rating of reviews submitted by customers who are verified and have active subscriptions, and the number of helpful votes they received.",
+    "Query": "SELECT \n  AVG(prsr.submitted_review_star_rating) AS average_rating,\n  COUNT(DISTINCT prsr.reviewing_customer_identifier) AS num_customers,\n  SUM(prsr.number_of_helpful_votes_received) AS total_helpful_votes\nFROM \n  product_reviews_and_ratings prsr\n  JOIN customerinfo ci ON prsr.reviewing_customer_identifier = ci.person_customer_id\n  JOIN customers_loyalty_program clp ON ci.person_customer_id = clp.associated_customer_reference_id\nWHERE \n  prsr.verification_status_of_reviewer = TRUE\n  AND clp.loyalty_program_tier_level = 'active'\nGROUP BY \n  1;"
+  },
+  {
+    "NL": "Find the product name and average review rating for products with more than 100 reviews",
+    "Query": "SELECT \n  p.product_display_name, \n  AVG(pr.submitted_review_star_rating) AS average_review_rating\nFROM \n  products p\n  JOIN product_reviews_and_ratings pr ON p.unique_product_identifier = pr.referenced_product_identifier\nWHERE \n  pr.number_of_helpful_votes_received > 100\nGROUP BY \n  p.product_display_name\nORDER BY \n  average_review_rating DESC;"
+  },
+  {
+    "NL": "Find the total number of orders placed by premium customers who have purchased products with an average supplier rating greater than 4 and have a total number of verified reviews greater than 1000, along with the total amount spent by these customers, the average rating given by them, and the total number of helpful votes received by their reviews.",
+    "Query": "SELECT \n  COUNT(DISTINCT o.person_customer_id) AS total_orders,\n  SUM(o.total_amount) AS total_amount_spent,\n  AVG(prsr.submitted_review_star_rating) AS average_rating,\n  SUM(prsr.number_of_helpful_votes_received) AS total_helpful_votes\nFROM \n  orders o\n  JOIN customerinfo c ON o.person_customer_id = c.person_customer_id\n  JOIN customers_loyalty_program clp ON c.person_customer_id = clp.associated_customer_reference_id\n  JOIN products p ON o.order_id IN (SELECT order_id FROM order_items WHERE product_id IN (SELECT unique_product_identifier FROM products WHERE associated_supplier_reference_id IN (SELECT supplier_unique_identifier FROM suppliers WHERE average_supplier_rating > 4)))\n  JOIN product_reviews_and_ratings prsr ON p.unique_product_identifier = prsr.referenced_product_identifier\nWHERE \n  clp.person_is_premium = TRUE\n  AND prsr.total_number_of_verified_reviews > 1000\nGROUP BY \n  o.person_customer_id;"
+  },
+  {
+    "NL": "List the orders with a discount applied greater than 10% in any currency.",
+    "Query": "SELECT o.*\nFROM orders o\nJOIN transactions_and_payments tp ON o.order_id = tp.linked_order_reference_identifier\nWHERE tp.applied_discount_value > (o.total_amount * 0.10);"
+  },
+  {
+    "NL": "Find the total number of products and the total price for each cart associated with a specific user.",
+    "Query": "SELECT \n  c.fk_user_id, \n  COUNT(p.unique_product_identifier) AS total_products, \n  SUM(p.standard_retail_price_including_tax * c.quantity) AS total_price\nFROM \n  cart c\n  JOIN products p ON c.fk_product_id = p.unique_product_identifier\nWHERE \n  c.fk_user_id = <specific_user_id>\nGROUP BY \n  c.fk_user_id;"
+  },
+  {
+    "NL": "List all items in the wishlist where the expected purchase date is within the next 30 days and the priority level is 'high'.",
+    "Query": "SELECT *\nFROM wishlist\nWHERE EXTRACT(MONTH FROM expected_purchase_date) = EXTRACT(MONTH FROM CURRENT_DATE) + 1\nAND EXTRACT(DAY FROM expected_purchase_date) <= 30\nAND priority_level = 'high';"
+  },
+  {
+    "NL": "Find the total number of products supplied by each supplier, along with the average supplier rating and the number of inventories associated with each supplier, ordered by the total number of products supplied in descending order.",
+    "Query": "SELECT \n  s.supplier_unique_identifier, \n  s.official_supplier_business_name, \n  COUNT(p.unique_product_identifier) AS total_products_supplied, \n  AVG(s.average_supplier_rating) AS average_supplier_rating, \n  COUNT(i.id) AS total_inventories_associated\nFROM \n  suppliers s\n  LEFT JOIN products p ON s.supplier_unique_identifier = p.associated_supplier_reference_id\n  LEFT JOIN inventory i ON p.unique_product_identifier = i.referenced_product_id\nGROUP BY \n  s.supplier_unique_identifier, \n  s.official_supplier_business_name\nORDER BY \n  total_products_supplied DESC;"
+  },
+  {
+    "NL": "Retrieve the total time spent and the average scroll depth percentage for events where the event type is 'purchase' and the device platform is 'mobile'.",
+    "Query": "SELECT \n    SUM(time_spent_seconds) AS total_time_spent,\n    AVG(scroll_depth_percentage) AS average_scroll_depth_percentage\nFROM \n    events\nWHERE \n    event_type = 'purchase' \n    AND device_platform = 'mobile';"
+  },
+  {
+    "NL": "Find all reviews of products that have been purchased more than 5 times, with the customer's review submission date and the total number of helpful votes received.",
+    "Query": "SELECT \n  prr.review_unique_identifier, \n  prr.reviewing_customer_identifier, \n  prr.customer_review_submission_date, \n  COUNT(o.order_id) AS total_purchases\nFROM \n  product_reviews_and_ratings prr\n  JOIN orders o ON prr.referenced_product_identifier = o.product_id\n  JOIN customerinfo c ON prr.reviewing_customer_identifier = c.person_customer_id\nWHERE \n  o.order_id IN (\n    SELECT \n      order_id\n    FROM \n      orders\n    GROUP BY \n      order_id\n    HAVING \n      COUNT(*) > 5\n  )\nGROUP BY \n  prr.review_unique_identifier, \n  prr.reviewing_customer_identifier, \n  prr.customer_review_submission_date\nORDER BY \n  total_purchases DESC;"
+  },
+  {
+    "NL": "Find the estimated delivery date and shipping cost for orders where the event type is 'order_placed' and the shipping status is 'shipped'.",
+    "Query": "SELECT \n  o.estimated_delivery, \n  o.shipping_cost\nFROM \n  orders o\n  JOIN events e ON o.order_id = e.order_id\n  JOIN shipping s ON o.order_id = s.fk_order_id\nWHERE \n  e.event_type = 'order_placed' \n  AND s.shipping_status = 'shipped';"
+  },
+  {
+    "NL": "Analyze the total number of clicks and the average time spent by customers from the United States who visited product pages of 'Electronics' category products and view those who spent the most time on the site, including product names and their respective suppliers.",
+    "Query": "WITH \n  us_customers AS (\n    SELECT person_customer_id \n    FROM customerinfo \n    WHERE address_country = 'United States'\n  ),\n  \n  electronics_product_pages AS (\n    SELECT \n      order_id, \n      product_name, \n      supplier_unique_identifier \n    FROM orders \n    JOIN order_items ON orders.order_id = order_items.order_id \n    JOIN products ON order_items.product_id = products.unique_product_identifier \n    WHERE products.product_category_primary = 'Electronics'\n  ),\n  \n  us_customers_product_pages AS (\n    SELECT \n      us.person_customer_id, \n      ep.product_name, \n      ep.supplier_unique_identifier, \n      SUM(CASE WHEN event_type = 'page_view' THEN 1 ELSE 0 END) AS total_clicks, \n      SUM(time_spent_seconds) AS total_time_spent \n    FROM us_customers us \n    JOIN events e ON us.person_customer_id = e.person_customer_id \n    JOIN electronics_product_pages ep ON e.order_id = ep.order_id \n    GROUP BY us.person_customer_id, ep.product_name, ep.supplier_unique_identifier\n  ),\n  \n  top_time_spent_customers AS (\n    SELECT \n      person_customer_id, \n      product_name, \n      supplier_unique_identifier, \n      total_clicks, \n      total_time_spent \n    FROM us_customers_product_pages \n    ORDER BY total_time_spent DESC \n    LIMIT 10\n  )\n\nSELECT * \nFROM top_time_spent_customers;"
+  },
+  {
+    "NL": "List all the campaigns with their corresponding campaign status, start date, end date and total revenue generated, and also list the total quantity of products in the cart for each campaign",
+    "Query": "SELECT \n  c.campaign_name, \n  c.campaign_status, \n  c.start_date, \n  c.end_date, \n  SUM(o.total_amount) AS total_revenue,\n  COALESCE(SUM(CART.quantity), 0) AS total_cart_quantity\nFROM \n  campaigns c\n  LEFT JOIN orders o ON c.campaign_id = o.campaign_id\n  LEFT JOIN cart CART ON o.order_id = CART.fk_order_id\nGROUP BY \n  c.campaign_name, \n  c.campaign_status, \n  c.start_date, \n  c.end_date\nORDER BY \n  total_revenue DESC;"
+  },
+  {
+    "NL": "List the anniversary_reward_voucher_status of customers and their corresponding shipping_status for orders with fk_order_id = 67890.",
+    "Query": "SELECT \n  c.anniversary_reward_voucher_status, \n  o.shipping_status\nFROM \n  customers_loyalty_program c\n  JOIN orders o ON c.associated_customer_reference_id = o.person_customer_id\nWHERE \n  o.fk_order_id = 67890;"
+  },
+  {
+    "NL": "Retrieve the loyalty_program_tier_level of customers who have reviewed a product referenced_product_identifier = 12345. Provide the review_unique_identifier and associated_review_image_urls.",
+    "Query": "SELECT \n  crlp.loyalty_membership_unique_identifier, \n  crlp.loyalty_program_tier_level, \n  prar.review_unique_identifier, \n  prar.associated_review_image_urls\nFROM \n  customers_loyalty_program crlp\n  JOIN product_reviews_and_ratings prar ON crlp.associated_customer_reference_id = prar.reviewing_customer_identifier\nWHERE \n  prar.referenced_product_identifier = 12345;"
+  },
+  {
+    "NL": "Find the total amount of all orders placed in the month of January 2023, along with the average tax amount applied to those orders.",
+    "Query": "SELECT \n    SUM(o.total_amount) AS total_amount,\n    AVG(o.tax_amount) AS average_tax_amount\nFROM \n    orders o\nWHERE \n    EXTRACT(MONTH FROM o.order_date) = 1 AND \n    EXTRACT(YEAR FROM o.order_date) = 2023;"
+  },
+  {
+    "NL": "What is the total shipping cost for orders that have been shipped?",
+    "Query": "SELECT \n    SUM(shipping_fee) AS total_shipping_cost\nFROM \n    orders\nWHERE \n    shipping_status = 'shipped';"
+  },
+  {
+    "NL": "Get the wishlists with the name of the wishlist item and its price at addition, along with the order status of the orders with matching campaign ID.",
+    "Query": "SELECT \n  w.id, \n  w.fk_product_id, \n  p.product_name, \n  p.price_at_addition, \n  o.order_status\nFROM \n  wishlist w\n  JOIN products p ON w.fk_product_id = p.unique_product_identifier\n  JOIN orders o ON w.fk_user_id = o.person_customer_id AND o.campaign_id = w.fk_campaign_id\nWHERE \n  w.wishlist_status = 'ACTIVE';"
+  },
+  {
+    "NL": "For each distinct product name in the wishlist, find the corresponding product id and brand name from the wishlist, as well as the order item id and item status from the order items table, where the wishlist product id matches the order item product id, and include the corresponding shipping address, shipping city, and shipping state from the shipping table.",
+    "Query": "SELECT \n  w.product_name, \n  w.product_id, \n  w.brand_name, \n  oi.order_item_id, \n  oi.item_status, \n  s.shipping_address, \n  s.shipping_city, \n  s.shipping_state\nFROM \n  wishlist w\n  JOIN products p ON w.fk_product_id = p.unique_product_identifier\n  JOIN order_items oi ON p.unique_product_identifier = oi.product_id\n  JOIN shipping s ON oi.order_id = s.fk_order_id\nWHERE \n  w.product_id = oi.product_id"
+  },
+  {
+    "NL": "Retrieve all refunds initiated by the users where the refund status is 'pending'.",
+    "Query": "SELECT *\nFROM refunds_returns\nWHERE fk_user_id IN (\n  SELECT person_customer_id\n  FROM customerinfo\n)\nAND status = 'pending';"
+  },
+  {
+    "NL": "Find the total amount of all orders placed by customers from the United States that were shipped using standard shipping methods and include a discount.",
+    "Query": "SELECT \n  SUM(o.total_amount) \nFROM \n  orders o \n  JOIN customerinfo c ON o.person_customer_id = c.person_customer_id \n  JOIN shipping s ON o.order_id = s.fk_order_id \nWHERE \n  c.address_country = 'United States' \n  AND s.shipping_carrier = 'Standard Shipping' \n  AND o.discount_applied > 0;"
+  },
+  {
+    "NL": "Find the event type, the campaign name, and the total number of products supplied by each supplier for events where the device type is 'mobile' and the campaign status is 'completed' and the supplier tax identification number is '123456789'.",
+    "Query": "SELECT \n  e.event_type, \n  c.campaign_name, \n  s.supplier_tax_identification_number, \n  COUNT(DISTINCT p.unique_product_identifier) AS total_products_supplied\nFROM \n  events e\n  JOIN orders o ON e.order_id = o.order_id\n  JOIN campaigns c ON o.campaign_id = c.campaign_id\n  JOIN suppliers s ON p.associated_supplier_reference_id = s.supplier_unique_identifier\n  JOIN products p ON e.order_item_id = p.unique_product_identifier\nWHERE \n  e.device_type = 'mobile' \n  AND c.campaign_status = 'completed' \n  AND s.supplier_tax_identification_number = '123456789'\nGROUP BY \n  e.event_type, \n  c.campaign_name, \n  s.supplier_tax_identification_number"
+  },
+  {
+    "NL": "Find the average total transaction amount for customers who have made at least one purchase and have loyalty points greater than 1000, along with the number of wishlist items and average spent per order for these customers, grouped by city and country",
+    "Query": "SELECT \n    c.address_city, \n    c.address_country, \n    AVG(t.total_transaction_amount) AS avg_total_transaction_amount, \n    COUNT(w.id) AS num_wishlist_items, \n    AVG(o.total_amount) AS avg_spent_per_order\nFROM \n    customerinfo c\nJOIN \n    orders o ON c.person_customer_id = o.person_customer_id\nJOIN \n    transactions_and_payments t ON o.order_id = t.linked_order_reference_identifier\nJOIN \n    wishlist w ON c.person_customer_id = w.fk_user_id\nWHERE \n    c.person_loyalty_points > 1000\nGROUP BY \n    c.address_city, \n    c.address_country\nORDER BY \n    c.address_city, \n    c.address_country;"
+  },
+  {
+    "NL": "List all the orders where the order status is 'Shipped' and the device platform is 'Windows'.",
+    "Query": "SELECT o.*\nFROM orders o\nJOIN events e ON o.order_id = e.order_id\nWHERE o.order_status = 'Shipped'\nAND e.event_type = 'Order Shipped'\nAND e.device_platform = 'Windows';"
+  },
+  {
+    "NL": "Retrieve the inventory of products with stock status as 'reorder'.",
+    "Query": "SELECT \n  i.id, \n  p.product_display_name, \n  i.quantity, \n  i.last_updated, \n  i.warehouse_location, \n  i.stock_threshold, \n  i.safety_stock, \n  s.official_supplier_business_name\nFROM \n  inventory i\n  JOIN products p ON i.referenced_product_id = p.unique_product_identifier\n  JOIN suppliers s ON i.supplier_id = s.supplier_unique_identifier\nWHERE \n  i.stock_status = 'reorder';"
+  },
+  {
+    "NL": "Find all campaigns with their corresponding total reach, impressions and email open rate where the campaign type is 'Social Media' and the target audience is 'Young Adults', and also find the total refund amount for each campaign",
+    "Query": "SELECT \n  c.campaign_name, \n  c.total_reach, \n  c.impressions, \n  c.email_open_rate, \n  SUM(r.refund_amount) AS total_refund_amount\nFROM \n  campaigns c\n  LEFT JOIN transactions_and_payments r ON c.campaign_id = r.linked_order_reference_identifier\nWHERE \n  c.campaign_type = 'Social Media' \n  AND c.target_audience = 'Young Adults'\nGROUP BY \n  c.campaign_name, \n  c.total_reach, \n  c.impressions, \n  c.email_open_rate;"
+  },
+  {
+    "NL": "Find the average shipping cost for orders shipped to the United States",
+    "Query": "SELECT AVG(shipping_cost) \nFROM shipping \nWHERE shipping_country = 'United States';"
+  },
+  {
+    "NL": "Find the total billed amount for transactions where the corresponding customer made a refund and the refund amount was more than $50.",
+    "Query": "SELECT \n    SUM(t.total_billed_amount) \nFROM \n    transactions_and_payments t \nJOIN \n    refunds_returns r ON t.linked_order_reference_identifier = r.fk_order_id \nWHERE \n    r.status = 'refunded' \n    AND r.refund_amount > 50;"
+  },
+  {
+    "NL": "Show the total amount of refunds and the total restocking fees for items in the inventory that belong to products that have a featured product flag set to true",
+    "Query": "SELECT \n  SUM(refund_amount) AS total_refunds,\n  SUM(restocking_fee) AS total_restocking_fees\nFROM \n  refunds_returns\n  JOIN products ON refunds_returns.fk_product_id = products.unique_product_identifier\nWHERE \n  products.featured_product_flag = TRUE;"
+  },
+  {
+    "NL": "What is the average aggregate customer review rating for all products from suppliers in the USA, who have an average supplier rating of at least 4.5, and what is the average total number of products supplied by these suppliers?",
+    "Query": "WITH \n  usa_suppliers AS (\n    SELECT \n      s.supplier_unique_identifier, \n      AVG(s.average_supplier_rating) AS avg_supplier_rating\n    FROM \n      suppliers s\n    WHERE \n      s.supplier_country_of_operation = 'USA'\n    GROUP BY \n      s.supplier_unique_identifier\n    HAVING \n      AVG(s.average_supplier_rating) >= 4.5\n  ),\n  \n  product_reviews AS (\n    SELECT \n      pr.referenced_product_identifier, \n      AVG(pr.submitted_review_star_rating) AS avg_customer_review_rating\n    FROM \n      product_reviews_and_ratings pr\n    GROUP BY \n      pr.referenced_product_identifier\n  )\n\nSELECT \n  AVG(pr.avg_customer_review_rating) AS avg_customer_review_rating, \n  COUNT(DISTINCT us.supplier_unique_identifier) AS num_suppliers, \n  SUM(us.avg_supplier_rating) AS total_products_supplied\nFROM \n  usa_suppliers us\n  JOIN product_reviews pr ON us.supplier_unique_identifier = pr.referenced_product_identifier"
+  },
+  {
+    "NL": "Show the total number of customers who have an active subscription and a Loyalty points greater than 1000.",
+    "Query": "SELECT COUNT(DISTINCT c.person_customer_id)\nFROM customerinfo c\nJOIN customers_loyalty_program clp ON c.person_customer_id = clp.associated_customer_reference_id\nWHERE c.person_is_premium = TRUE AND clp.accumulated_loyalty_points_balance > 1000;"
+  },
+  {
+    "NL": "What is the product id and quantity for each order that has a transaction review score of more than 4.5 and has been fully paid?",
+    "Query": "SELECT \n  o.order_id, \n  oi.product_id, \n  oi.quantity\nFROM \n  orders o\n  JOIN order_items oi ON o.order_id = oi.order_id\n  JOIN transactions_and_payments tp ON o.order_id = tp.linked_order_reference_identifier\n  JOIN product_reviews_and_ratings prr ON o.order_id = prr.linked_order_reference_identifier\nWHERE \n  prr.transaction_review_score > 4.5\n  AND tp.transaction_status = 'fully_paid';"
+  },
+  {
+    "NL": "Find the names of products that have received a review with a sentiment analysis score greater than 0.7 and have a total number of verified reviews of at least 50.",
+    "Query": "SELECT p.product_display_name\nFROM products p\nJOIN product_reviews_and_ratings r ON p.unique_product_identifier = r.referenced_product_identifier\nWHERE r.sentiment_analysis_score > 0.7\nAND r.number_of_verified_reviews >= 50;"
+  },
+  {
+    "NL": "List the inventory ids and referenced product ids of all inventory items with quantity less than the safety stock and the supplier id is 1.",
+    "Query": "SELECT \n  i.id, \n  i.referenced_product_id\nFROM \n  inventory i\nWHERE \n  i.quantity < i.safety_stock \n  AND i.supplier_id = 1;"
+  },
+  {
+    "NL": "Get the total discount amount redeemed and the total number of products supplied for customers who are eligible for special promotions and have a supplier with more than 100 products supplied",
+    "Query": "SELECT \n  SUM(discount_amount) AS total_discount_amount_redeemed,\n  COUNT(DISTINCT s.supplier_unique_identifier) AS total_number_of_suppliers\nFROM \n  customers_loyalty_program clp\n  JOIN customerinfo ci ON clp.associated_customer_reference_id = ci.person_customer_id\n  JOIN transactions_and_payments tap ON ci.person_customer_id = tap.corresponding_customer_reference_identifier\n  JOIN orders o ON tap.linked_order_reference_identifier = o.order_id\n  JOIN suppliers s ON o.account_account_balance > 0 AND s.total_number_of_products_supplied > 100\nWHERE \n  clp.eligible_for_special_promotions = TRUE\nGROUP BY \n  s.supplier_unique_identifier;"
+  },
+  {
+    "NL": "Find the total transaction amount and the number of reviews for each customer who has made a transaction and submitted a review for the same product.",
+    "Query": "SELECT \n  c.person_customer_id, \n  SUM(t.total_transaction_amount) AS total_transaction_amount, \n  COUNT(pr.referenced_product_identifier) AS num_reviews\nFROM \n  transactions_and_payments t\n  JOIN orders o ON t.linked_order_reference_identifier = o.order_id\n  JOIN customerinfo c ON o.person_customer_id = c.person_customer_id\n  JOIN product_reviews_and_ratings pr ON c.person_customer_id = pr.reviewing_customer_identifier\n  JOIN products p ON pr.referenced_product_identifier = p.unique_product_identifier\nGROUP BY \n  c.person_customer_id"
+  },
+  {
+    "NL": "Retrieve the product display name, promotional price, and the loyalty membership unique identifier for customers who have redeemed loyalty points for products that are in stock and have an aggregate customer review rating of at least 4.",
+    "Query": "SELECT \n  p.product_display_name, \n  p.promotional_discounted_price, \n  cm.loyalty_membership_unique_identifier\nFROM \n  products p\n  JOIN order_items oi ON p.unique_product_identifier = oi.product_id\n  JOIN orders o ON oi.order_id = o.order_id\n  JOIN customers_loyalty_program cm ON o.person_customer_id = cm.associated_customer_reference_id\nWHERE \n  p.available_stock_quantity_in_units > 0\n  AND p.product_reviews_and_ratings.sentiment_analysis_score >= 4\n  AND cm.accumulated_loyalty_points_balance > 0\n  AND cm.loyalty_program_tier_level IS NOT NULL;"
+  },
+  {
+    "NL": "Find all orders in the cart where the product is a featured product and the estimated delivery date is after today.",
+    "Query": "SELECT *\nFROM cart\nWHERE fk_product_id IN (\n  SELECT unique_product_identifier\n  FROM products\n  WHERE featured_product_flag = TRUE\n) AND estimated_delivery_date > CURRENT_DATE;"
+  },
+  {
+    "NL": "Find the total number of products supplied by each supplier and list them in descending order.",
+    "Query": "SELECT \n  s.supplier_unique_identifier, \n  s.official_supplier_business_name, \n  COUNT(p.unique_product_identifier) AS total_products_supplied\nFROM \n  suppliers s\n  JOIN products p ON s.supplier_unique_identifier = p.associated_supplier_reference_id\nGROUP BY \n  s.supplier_unique_identifier, \n  s.official_supplier_business_name\nORDER BY \n  total_products_supplied DESC;"
+  },
+  {
+    "NL": "Retrieve the total amount of discounts applied to orders within the last year, grouped by campaign.",
+    "Query": "SELECT \n    c.campaign_name, \n    SUM(o.discount_applied) AS total_discounts\nFROM \n    orders o\nJOIN \n    campaigns c ON o.campaign_id = c.campaign_id\nWHERE \n    o.order_date >= DATE_TRUNC('year', CURRENT_DATE) - INTERVAL '1 year'\nGROUP BY \n    c.campaign_name\nORDER BY \n    total_discounts DESC;"
+  },
+  {
+    "NL": "Identify the top 5 customers who have the highest total number of edits made in their reviews and have submitted reviews with a review_unique_identifier that is either 100 or 200. Additionally, for these customers, find the average time spent on the product review page and the total number of events where they clicked more than 3 times and spent more than 10 seconds on the page, considering only events that happened after June 1, 2022. The results should be ordered by the total number of edits in descending order.",
+    "Query": "WITH \nreview_edits AS (\n  SELECT \n    reviewing_customer_identifier, \n    COUNT(*) AS total_edits\n  FROM \n    product_reviews_and_ratings\n  GROUP BY \n    reviewing_customer_identifier\n),\nreview_submissions AS (\n  SELECT \n    reviewing_customer_identifier, \n    review_unique_identifier\n  FROM \n    product_reviews_and_ratings\n  WHERE \n    review_unique_identifier IN (100, 200)\n),\nreview_time_spent AS (\n  SELECT \n    reviewing_customer_identifier, \n    AVG(time_spent_seconds) AS avg_time_spent\n  FROM \n    events\n  WHERE \n    event_type = 'product_review_page'\n  GROUP BY \n    reviewing_customer_identifier\n),\nclick_events AS (\n  SELECT \n    reviewing_customer_identifier, \n    COUNT(*) AS click_count\n  FROM \n    events\n  WHERE \n    event_type = 'click' \n    AND time_spent_seconds > 10 \n    AND click_count > 3\n  GROUP BY \n    reviewing_customer_identifier\n),\nresult AS (\n  SELECT \n    rce.reviewing_customer_identifier, \n    rce.total_edits, \n    rts.avg_time_spent, \n    ce.click_count\n  FROM \n    review_edits rce\n  JOIN \n    review_submissions rs ON rce.reviewing_customer_identifier = rs.reviewing_customer_identifier\n  JOIN \n    review_time_spent rts ON rce.reviewing_customer_identifier = rts.reviewing_customer_identifier\n  JOIN \n    click_events ce ON rce.reviewing_customer_identifier = ce.reviewing_customer_identifier\n  WHERE \n    rce.total_edits > 0\n  AND rts.avg_time_spent IS NOT NULL\n  AND ce.click_count IS NOT NULL\n)\nSELECT \n  *\nFROM \n  result\nORDER BY \n  total_edits DESC\nLIMIT 5;"
+  },
+  {
+    "NL": "Find all the orders with total price greater than 100 and the item is returnable.",
+    "Query": "SELECT o.*\nFROM orders o\nJOIN order_items oi ON o.order_id = oi.order_id\nWHERE o.total_amount > 100 AND oi.is_returnable = TRUE;"
+  },
+  {
+    "NL": "Retrieve the official business name of suppliers who provide products with an expected restock date this month and have a supplier rating above 4.5, along with the names of customers who have ordered from these suppliers.",
+    "Query": "SELECT \n  s.official_supplier_business_name, \n  p.product_name, \n  c.person_first_name, \n  c.person_last_name\nFROM \n  suppliers s\n  JOIN products p ON s.supplier_unique_identifier = p.associated_supplier_reference_id\n  JOIN orders o ON p.unique_product_identifier = o.order_id\n  JOIN customers c ON o.person_customer_id = c.person_customer_id\nWHERE \n  p.expected_restock_date >= DATE_TRUNC('month', CURRENT_DATE) \n  AND s.average_supplier_rating > 4.5\n  AND o.order_date >= DATE_TRUNC('month', CURRENT_DATE)\nORDER BY \n  s.official_supplier_business_name, \n  p.product_name;"
+  },
+  {
+    "NL": "Get the list of customers who have viewed their wishlist at least once and have made a purchase, along with their wishlist details, the number of reviews they have submitted, and the total amount spent by them. Include the event type and device platform for each customer.",
+    "Query": "SELECT \n  c.person_customer_id, \n  c.person_first_name, \n  c.person_last_name, \n  wl.product_name, \n  wl.quantity, \n  wl.price_at_addition, \n  wl.discount_at_addition, \n  wl.wishlist_status, \n  wl.priority_level, \n  wl.expected_purchase_date, \n  COUNT(DISTINCT er.event_id) AS num_reviews, \n  SUM(o.total_amount) AS total_spent\nFROM \n  customerinfo c\n  JOIN wishlist wl ON c.person_customer_id = wl.fk_user_id\n  LEFT JOIN orders o ON c.person_customer_id = o.person_customer_id\n  LEFT JOIN events er ON c.person_customer_id = er.person_customer_id\nWHERE \n  wl.wishlist_status = 'active' \n  AND o.order_id IS NOT NULL \n  AND er.event_type = 'viewed_wishlist'\nGROUP BY \n  c.person_customer_id, \n  c.person_first_name, \n  c.person_last_name, \n  wl.product_name, \n  wl.quantity, \n  wl.price_at_addition, \n  wl.discount_at_addition, \n  wl.wishlist_status, \n  wl.priority_level, \n  wl.expected_purchase_date\nORDER BY \n  total_spent DESC;"
+  },
+  {
+    "NL": "List all customers who have registered after January 1, 2022, and have a loyalty point balance greater than 1000.",
+    "Query": "SELECT c.*\nFROM customerinfo c\nWHERE c.person_registration_date >= '2022-01-01'::date\nAND c.loyalty_points > 1000;"
+  },
+  {
+    "NL": "Find all reviews with a sentiment analysis score greater than 4 that were submitted by customers who have made more than 10 previous purchases and were reviewed on the same day as the last restock date of their associated product, excluding those products that are currently out of stock.",
+    "Query": "SELECT pr.*\nFROM product_reviews_and_ratings pr\nJOIN customerinfo c ON pr.reviewing_customer_identifier = c.person_customer_id\nJOIN orders o ON c.person_customer_id = o.person_customer_id\nJOIN products p ON pr.referenced_product_identifier = p.unique_product_identifier\nJOIN inventory i ON p.unique_product_identifier = i.referenced_product_id\nWHERE pr.sentiment_analysis_score > 4\nAND c.total_number_of_previous_purchases > 10\nAND o.order_date = i.last_restock_date\nAND i.stock_status = 'in_stock';"
+  },
+  {
+    "NL": "Find all products with a standard retail price greater than $50 and the customers who have redeemed more than 1000 loyalty points and have an anniversary reward voucher status as true.",
+    "Query": "SELECT p.*\nFROM products p\nJOIN customerinfo c ON p.associated_customer_reference_id = c.person_customer_id\nJOIN customers_loyalty_program clp ON c.person_customer_id = clp.associated_customer_reference_id\nWHERE p.standard_retail_price_including_tax > 50\nAND clp.total_loyalty_points_redeemed > 1000\nAND clp.anniversary_reward_voucher_status = TRUE;"
+  },
+  {
+    "NL": "Retrieve the first name, last name, and total discount amount redeemed for customers who are eligible for special promotions and have more than 1000 loyalty points.",
+    "Query": "SELECT \n  c.person_first_name, \n  c.person_last_name, \n  SUM(cl.total_discount_amount_redeemed) AS total_discount_amount\nFROM \n  customerinfo c\n  JOIN customers_loyalty_program cl ON c.person_customer_id = cl.associated_customer_reference_id\nWHERE \n  cl.eligible_for_special_promotions = TRUE \n  AND cl.accumulated_loyalty_points_balance > 1000\nGROUP BY \n  c.person_first_name, \n  c.person_last_name\nORDER BY \n  total_discount_amount DESC;"
+  },
+  {
+    "NL": "What is the total revenue generated by each campaign and the total amount spent by each order?",
+    "Query": "SELECT \n  c.campaign_name, \n  SUM(o.total_amount) AS total_revenue, \n  SUM(o.total_amount - o.discount_applied) AS total_amount_spent\nFROM \n  campaigns c\n  JOIN orders o ON c.campaign_id = o.campaign_id\nGROUP BY \n  c.campaign_name\nORDER BY \n  total_revenue DESC;"
+  },
+  {
+    "NL": "Find the total orders for each customer who has a preferred payment method and sort the results in ascending order.",
+    "Query": "SELECT \n  c.person_customer_id, \n  c.person_first_name, \n  c.person_last_name, \n  COUNT(o.order_id) AS total_orders\nFROM \n  customerinfo c\n  JOIN orders o ON c.person_customer_id = o.person_customer_id\nWHERE \n  c.account_preferred_payment_method IS NOT NULL\nGROUP BY \n  c.person_customer_id, \n  c.person_first_name, \n  c.person_last_name\nORDER BY \n  total_orders ASC;"
+  },
+  {
+    "NL": "Get the campaign name and total revenue generated for each campaign from the given campaign ID. Also, find the total billed amount in the transactions table for each campaign ID. Order the results by the total revenue in descending order.",
+    "Query": "SELECT \n  c.campaign_name, \n  SUM(o.revenue_generated) AS total_revenue, \n  SUM(t.total_billed_amount) AS total_billed_amount\nFROM \n  campaigns c\n  LEFT JOIN orders o ON c.campaign_id = o.campaign_id\n  LEFT JOIN transactions_and_payments t ON o.order_id = t.linked_order_reference_identifier\nWHERE \n  c.campaign_id = <given_campaign_id>\nGROUP BY \n  c.campaign_name\nORDER BY \n  total_revenue DESC;"
+  },
+  {
+    "NL": "Calculate the total revenue generated by successful campaigns that ended in the last 30 days.",
+    "Query": "SELECT \n    SUM(o.total_amount) AS total_revenue\nFROM \n    orders o\nJOIN \n    campaigns c ON o.campaign_id = c.campaign_id\nWHERE \n    c.campaign_status = 'successful'\n    AND o.order_date >= NOW() - INTERVAL '30 days'\n    AND o.order_status = 'completed';"
+  },
+  {
+    "NL": "Find the total number of products supplied by each supplier along with the corresponding inventory quantity for products with a safety stock greater than 10.",
+    "Query": "SELECT \n  s.supplier_unique_identifier, \n  s.official_supplier_business_name, \n  SUM(i.quantity) AS total_inventory_quantity\nFROM \n  suppliers s\n  JOIN inventory i ON s.supplier_unique_identifier = i.supplier_id\nWHERE \n  i.safety_stock > 10\nGROUP BY \n  s.supplier_unique_identifier, \n  s.official_supplier_business_name\nORDER BY \n  total_inventory_quantity DESC;"
+  },
+  {
+    "NL": "List the customer loyalty program details for customers who have placed orders with a total amount greater than $100, including their loyalty points balance, loyalty tier level, and the campaign name for the order.",
+    "Query": "SELECT \n  c.loyalty_membership_unique_identifier,\n  c.associated_customer_reference_id,\n  c.loyalty_program_tier_level,\n  c.accumulated_loyalty_points_balance,\n  o.total_amount,\n  c.loyalty_tier_level,\n  c.campaign_name\nFROM \n  customers_loyalty_program c\n  JOIN orders o ON c.associated_customer_reference_id = o.person_customer_id\nWHERE \n  o.total_amount > 100;"
+  },
+  {
+    "NL": "Find the total revenue generated by each campaign type along with the total quantity of inventory for each product",
+    "Query": "SELECT \n  c.campaign_type, \n  SUM(o.total_amount) AS total_revenue, \n  SUM(p.quantity) AS total_inventory\nFROM \n  campaigns c\n  JOIN orders o ON c.campaign_id = o.campaign_id\n  JOIN products p ON o.referenced_product_id = p.unique_product_identifier\nGROUP BY \n  c.campaign_type\nORDER BY \n  total_revenue DESC;"
+  },
+  {
+    "NL": "List the average number of stars given by customers who have placed more than 10 orders.",
+    "Query": "SELECT AVG(prsr.submitted_review_star_rating) \nFROM product_reviews_and_ratings prsr \nJOIN orders o ON prsr.referenced_product_identifier = o.order_id \nJOIN customerinfo c ON o.person_customer_id = c.person_customer_id \nWHERE o.order_id IN (\n  SELECT order_id \n  FROM orders \n  GROUP BY order_id \n  HAVING COUNT(*) > 10\n)"
+  },
+  {
+    "NL": "Find the top 5 most purchased products with their average rating from customers who have purchased at least 2 products and have a loyalty membership tier level of Platinum, along with the total number of reviews for each product and the total loyalty points earned by each customer.",
+    "Query": "WITH \n  -- Calculate the total loyalty points earned by each customer\n  customer_loyalty_points AS (\n    SELECT \n      c.person_customer_id, \n      SUM(clp.accumulated_loyalty_points_balance) AS total_loyalty_points\n    FROM \n      customerinfo c\n    JOIN \n      customers_loyalty_program clp ON c.person_customer_id = clp.associated_customer_reference_id\n    GROUP BY \n      c.person_customer_id\n  ),\n  \n  -- Calculate the average rating for each product\n  product_ratings AS (\n    SELECT \n      prr.referenced_product_identifier, \n      AVG(prr.submitted_review_star_rating) AS average_rating, \n      COUNT(*) AS total_reviews\n    FROM \n      product_reviews_and_ratings prr\n    GROUP BY \n      prr.referenced_product_identifier\n  ),\n  \n  -- Find the top 5 most purchased products\n  top_products AS (\n    SELECT \n      o.order_id, \n      p.unique_product_identifier, \n      COUNT(*) AS total_purchases\n    FROM \n      orders o\n    JOIN \n      order_items oi ON o.order_id = oi.order_id\n    JOIN \n      products p ON oi.referenced_product_id = p.unique_product_identifier\n    GROUP BY \n      o.order_id, \n      p.unique_product_identifier\n    ORDER BY \n      total_purchases DESC\n    LIMIT 5\n  )\n\nSELECT \n  tp.unique_product_identifier, \n  tp.total_purchases, \n  pr.average_rating, \n  pr.total_reviews, \n  clp.total_loyalty_points\nFROM \n  top_products tp\nJOIN \n  product_ratings pr ON tp.unique_product_identifier = pr.referenced_product_identifier\nJOIN \n  customer_loyalty_points clp ON tp.total_purchases > 1 AND clp.total_loyalty_points > 0\nWHERE \n  clp.total_loyalty_points > 0\nORDER BY \n  tp.total_purchases DESC;"
+  },
+  {
+    "NL": "Find the total revenue generated by campaigns that were successful, defined as campaigns with an actual spent less than the budget.",
+    "Query": "SELECT \n  SUM(revenue_generated) AS total_revenue\nFROM \n  campaigns \nWHERE \n  actual_spent < budget \n  AND campaign_status = 'successful';"
+  },
+  {
+    "NL": "Retrieve the product display names and the number of orders for products that have been reviewed with a rating above 4 in the past month, along with the customer's first name and last name who placed the order.",
+    "Query": "SELECT \n  p.product_display_name, \n  COUNT(o.order_id) AS num_orders, \n  c.person_first_name, \n  c.person_last_name\nFROM \n  products p\n  JOIN order_items oi ON p.unique_product_identifier = oi.product_id\n  JOIN orders o ON oi.order_id = o.order_id\n  JOIN customerinfo c ON o.person_customer_id = c.person_customer_id\n  JOIN product_reviews_and_ratings r ON p.unique_product_identifier = r.referenced_product_identifier\nWHERE \n  r.submitted_review_star_rating > 4\n  AND o.order_date >= DATE_TRUNC('month', NOW()) - INTERVAL '1 month'\nGROUP BY \n  p.product_display_name, \n  c.person_first_name, \n  c.person_last_name\nORDER BY \n  num_orders DESC;"
+  },
+  {
+    "NL": "Get the total quantity of all products in the inventory with a stock status of 'in stock' and a warehouse location of 'main warehouse', along with the product identifier and last updated timestamp.",
+    "Query": "SELECT \n  i.referenced_product_id, \n  i.quantity, \n  i.last_updated\nFROM \n  inventory i\nWHERE \n  i.stock_status = 'in stock' \n  AND i.warehouse_location = 'main warehouse';"
+  },
+  {
+    "NL": "Get the top 5 products with highest average customer review rating.",
+    "Query": "SELECT \n    p.unique_product_identifier, \n    p.product_display_name, \n    AVG(pr.submitted_review_star_rating) AS average_review_rating\nFROM \n    products p\nJOIN \n    product_reviews_and_ratings pr ON p.unique_product_identifier = pr.referenced_product_identifier\nGROUP BY \n    p.unique_product_identifier, \n    p.product_display_name\nORDER BY \n    average_review_rating DESC\nLIMIT 5;"
+  },
+  {
+    "NL": "Get the average amount spent per order by each customer for orders placed in the last 30 days.",
+    "Query": "SELECT \n  c.person_customer_id, \n  AVG(o.total_amount) AS average_amount_spent_per_order\nFROM \n  orders o\n  JOIN customerinfo c ON o.person_customer_id = c.person_customer_id\nWHERE \n  o.order_date >= NOW() - INTERVAL '30 days'\nGROUP BY \n  c.person_customer_id\nORDER BY \n  average_amount_spent_per_order DESC;"
+  },
+  {
+    "NL": "Retrieve all reviews where the reviewer is verified and the review has received more than 5 helpful votes.",
+    "Query": "SELECT *\nFROM product_reviews_and_ratings\nWHERE verification_status_of_reviewer = TRUE\nAND number_of_helpful_votes_received > 5;"
+  },
+  {
+    "NL": "Retrieve the details of products in the wishlist along with customer's first and last name for wishlists that have a reminder set and the product is still in stock.",
+    "Query": "SELECT \n  p.*,\n  c.person_first_name,\n  c.person_last_name\nFROM \n  wishlist w\n  JOIN customerinfo c ON w.fk_user_id = c.person_customer_id\n  JOIN products p ON w.fk_product_id = p.unique_product_identifier\nWHERE \n  w.reminder_set = TRUE\n  AND p.stock_status = TRUE;"
+  },
+  {
+    "NL": "Retrieve the details of products that have been returned more than once due to 'damaged' reasons, along with the average cart value of those returns and the customer's email who initiated the returns, excluding products that are no longer active.",
+    "Query": "SELECT \n  p.*,\n  AVG(c.total_price) AS avg_cart_value,\n  c.email\nFROM \n  product_reviews_and_ratings pr\n  JOIN products p ON pr.referenced_product_identifier = p.unique_product_identifier\n  JOIN refunds_returns rr ON pr.referenced_product_identifier = rr.fk_product_id\n  JOIN customerinfo c ON rr.fk_user_id = c.person_customer_id\n  JOIN cart ca ON rr.fk_order_id = ca.fk_order_id\nWHERE \n  rr.reason = 'damaged' AND\n  rr.status = 'returned' AND\n  p.active_product_status = TRUE AND\n  COUNT(rr.id) > 1\nGROUP BY \n  p.unique_product_identifier, c.email\nORDER BY \n  avg_cart_value DESC;"
+  },
+  {
+    "NL": "How many campaigns are of type 'email' and have an email open rate greater than 0.5?",
+    "Query": "SELECT COUNT(*)\nFROM campaigns\nWHERE campaign_type = 'email'\nAND email_open_rate > 0.5;"
+  },
+  {
+    "NL": "Which products are shipped to the same state where shipping status is 'Delivered' and estimated delivery is within the next 7 days?",
+    "Query": "SELECT p.*\nFROM products p\nJOIN shipping s ON p.unique_product_identifier = s.fk_product_id\nWHERE s.shipping_state = s.shipping_city\nAND s.shipping_status = 'Delivered'\nAND s.estimated_delivery >= CURRENT_DATE + INTERVAL '1 day'\nAND s.estimated_delivery <= CURRENT_DATE + INTERVAL '7 day';"
+  },
+  {
+    "NL": "Find the total billed amount and the transaction date for all transactions that were part of campaigns with an ROI greater than 100% and used the payment method 'Credit Card'.",
+    "Query": "SELECT \n  SUM(t.total_billed_amount) AS total_billed_amount,\n  t.transaction_date\nFROM \n  transactions_and_payments t\n  JOIN orders o ON t.linked_order_reference_identifier = o.order_id\n  JOIN campaigns c ON o.campaign_id = c.campaign_id\nWHERE \n  c.ROI > 100\n  AND t.payment_method_used = 'Credit Card'\nGROUP BY \n  t.transaction_date"
+  },
+  {
+    "NL": "Find the total amount spent by each customer on orders that included items with a warranty period of more than 1 year, and include only those orders which were shipped after January 1, 2023.",
+    "Query": "SELECT \n  c.person_customer_id, \n  SUM(o.total_amount) AS total_spent\nFROM \n  customerinfo c\n  JOIN orders o ON c.person_customer_id = o.person_customer_id\n  JOIN order_items oi ON o.order_id = oi.order_id\n  JOIN products p ON oi.product_id = p.unique_product_identifier\nWHERE \n  p.warranty_period > 1\n  AND o.shipping_date >= '2023-01-01'\nGROUP BY \n  c.person_customer_id;"
+  },
+  {
+    "NL": "Find the average time spent on the website by users who clicked on a push notification and completed a survey.",
+    "generated_sql": "WITH \n  -- Calculate the time spent on the website for users who clicked on a push notification and completed a survey\n  user_session_data AS (\n    SELECT \n      e.person_customer_id,\n      SUM(e.time_spent_seconds) AS total_time_spent\n    FROM \n      events e\n    WHERE \n      e.event_type = 'push_notification_clicked' \n      AND e.survey_completed = TRUE\n    GROUP BY \n      e.person_customer_id\n  ),\n  \n  -- Calculate the average time spent on the website\n  average_time_spent AS (\n    SELECT \n      AVG(total_time_spent) AS average_time_spent\n    FROM \n      user_session_data\n  )\n\nSELECT \n  average_time_spent\nFROM \n  average_time_spent;"
+  },
+  {
+    "NL": "Find the average time spent on the website by users who clicked on a push notification and completed a survey.",
+    "Query": "SELECT AVG(time_spent) AS average_time_spent\nFROM (\n    SELECT user_id, SUM(time_spent) AS time_spent\n    FROM (\n        SELECT user_id, EXTRACT(EPOCH FROM timestamp - timestamp_of_push_notification) AS time_spent\n        FROM users\n        WHERE timestamp_of_push_notification IS NOT NULL\n        AND timestamp_of_survey_completion IS NOT NULL\n    ) AS subquery1\n    GROUP BY user_id\n) AS subquery2;"
+  },
+  {
+    "NL": "Get the count of wishlist items for each user and sort them in descending order.",
+    "Query": "SELECT user_id, COUNT(*) as wishlist_count\nFROM wishlist\nGROUP BY user_id\nORDER BY wishlist_count DESC;"
+  },
+  {
+    "NL": "Find the products in the cart that have a promotional discounted price less than $50, along with the customer's loyalty program tier level and the customer's accumulated loyalty points balance.",
+    "Query": "SELECT \n    c.customer_id, \n    c.loyalty_program_tier, \n    c.accumulated_loyalty_points, \n    p.product_name, \n    p.promotional_discounted_price\nFROM \n    customers c\nJOIN \n    cart_items ci ON c.customer_id = ci.customer_id\nJOIN \n    products p ON ci.product_id = p.product_id\nWHERE \n    p.promotional_discounted_price < 50;"
+  },
+  {
+    "NL": "What is the total discount amount redeemed by customers who have participated in exclusive beta testing and have a loyalty membership unique identifier greater than 1000?",
+    "Query": "SELECT SUM(discount_amount) \nFROM customers \nWHERE loyalty_membership_id > 1000 \n  AND customer_id IN (\n    SELECT customer_id \n    FROM beta_test_participants \n    WHERE beta_test_name = 'exclusive_beta_test'\n  );"
+  },
+  {
+    "NL": "Retrieve the total amount of all orders that contain products from the cart of user with ID 123 and have a shipping date after January 1, 2023.",
+    "Query": "SELECT SUM(o.total_amount) \nFROM orders o \nJOIN order_items oi ON o.id = oi.order_id \nJOIN carts c ON oi.cart_id = c.id \nJOIN users u ON c.user_id = u.id \nWHERE u.id = 123 \nAND o.shipping_date >= '2023-01-01';"
+  },
+  {
+    "NL": "What are the campaign names of the campaigns that have generated more than $1000 in revenue and have a cost per acquisition of less than $10?",
+    "Query": "SELECT campaign_name\nFROM campaigns\nWHERE revenue > 1000\nAND cost_per_acquisition < 10;"
+  },
+  {
+    "NL": "Show the average rating of reviews submitted by customers who are verified and have active subscriptions, and the number of helpful votes they received.",
+    "Query": "SELECT \n    AVG(rating) AS average_rating,\n    COUNT(hv.review_id) AS helpful_votes\nFROM \n    reviews r\nJOIN \n    helpful_votes hv ON r.review_id = hv.review_id\nJOIN \n    customers c ON r.customer_id = c.customer_id\nWHERE \n    c.verified = TRUE AND c.subscription_status = 'active'\nGROUP BY \n    r.customer_id;"
+  },
+  {
+    "NL": "Find the product name and average review rating for products with more than 100 reviews",
+    "Query": "SELECT \n    p.product_name, \n    AVG(r.review_rating) AS average_review_rating\nFROM \n    products p\nJOIN \n    reviews r ON p.product_id = r.product_id\nGROUP BY \n    p.product_name\nHAVING \n    COUNT(r.review_id) > 100;"
+  }
+]
